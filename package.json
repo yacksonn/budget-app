@@ -11,6 +11,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:backfill-cc": "tsx prisma/backfill-cc-payments.ts",
     "db:backfill-included": "tsx prisma/backfill-included-spending.ts",
+    "db:backfill-groceries": "tsx prisma/backfill-grocery-merchants.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "postinstall": "prisma generate"
   },

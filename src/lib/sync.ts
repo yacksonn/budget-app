@@ -3,6 +3,7 @@ import { plaidClient } from "@/lib/plaid";
 import type { Transaction as PlaidTransaction } from "plaid";
 import { classifyCreditCardPayments } from "@/lib/cc-payments";
 import { defaultIncludedInSpending } from "@/lib/spending";
+import { GROCERIES_CATEGORY_NAME, isGroceryMerchant } from "@/lib/merchant-rules";
 
 // Lookup tables from Plaid's personal_finance_category to an internal categoryId. The
 // `detailed` map takes precedence over `primary` so more specific categories (e.g. a
@@ -12,6 +13,7 @@ type CategoryMap = {
   primary: Map<string, string>;
   detailed: Map<string, string>;
   groupById: Map<string, string>;
+  groceriesId: string | null;
 };
 async function buildCategoryMap(): Promise<CategoryMap> {
   const cats = await prisma.category.findMany();
@@ -23,7 +25,9 @@ async function buildCategoryMap(): Promise<CategoryMap> {
     if (c.plaidDetailed) detailed.set(c.plaidDetailed, c.id);
     groupById.set(c.id, c.group);
   }
-  return { primary, detailed, groupById };
+  const groceriesId =
+    cats.find((c) => c.name === GROCERIES_CATEGORY_NAME && c.parentId)?.id ?? null;
+  return { primary, detailed, groupById, groceriesId };
 }
 
 // Refresh account rows + balances for a Plaid item.
@@ -70,7 +74,11 @@ async function upsertTransaction(
   const primary = t.personal_finance_category?.primary ?? null;
   const detailed = t.personal_finance_category?.detailed ?? null;
   // Prefer the more specific `detailed` mapping (e.g. credit-card payment) over `primary`.
+  // Merchant rules (e.g. Costco/Walmart → Groceries) override both.
   const mappedCategoryId =
+    (categoryMap.groceriesId && isGroceryMerchant(t.name, t.merchant_name)
+      ? categoryMap.groceriesId
+      : undefined) ??
     (detailed ? categoryMap.detailed.get(detailed) : undefined) ??
     (primary ? categoryMap.primary.get(primary) : undefined) ??
     null;
