@@ -18,6 +18,9 @@ model PlaidItem {
   institutionName String?
   institutionId   String?
   cursor          String? // transactions/sync cursor for incremental updates
+  lastSyncedAt      DateTime? // last successful sync
+  lastSyncError     String? // message from the most recent failed sync; null when healthy
+  lastSyncErrorCode String? // Plaid error_code (e.g. ITEM_LOGIN_REQUIRED), if any
   createdAt       DateTime  @default(now())
   accounts        Account[]
 }

@@ -110,8 +110,40 @@ async function upsertTransaction(
   });
 }
 
-// Incrementally sync one Plaid item using the stored cursor.
-export async function syncItem(itemDbId: string): Promise<{ added: number; modified: number; removed: number }> {
+type SyncCounts = { added: number; modified: number; removed: number };
+
+// Pull a readable message + Plaid error_code out of a thrown error (Plaid errors are axios errors).
+function describeError(err: any): { message: string; code: string | null } {
+  const data = err?.response?.data;
+  return {
+    message: data?.display_message || data?.error_message || err?.message || "Unknown error",
+    code: data?.error_code ?? null,
+  };
+}
+
+// Incrementally sync one Plaid item, recording the outcome on the item so the UI can show
+// its sync status. Rethrows on failure.
+export async function syncItem(itemDbId: string): Promise<SyncCounts> {
+  try {
+    const counts = await runItemSync(itemDbId);
+    await prisma.plaidItem.update({
+      where: { id: itemDbId },
+      data: { lastSyncedAt: new Date(), lastSyncError: null, lastSyncErrorCode: null },
+    });
+    return counts;
+  } catch (err) {
+    const { message, code } = describeError(err);
+    await prisma.plaidItem
+      .update({
+        where: { id: itemDbId },
+        data: { lastSyncError: message, lastSyncErrorCode: code },
+      })
+      .catch(() => undefined); // item may not exist
+    throw err;
+  }
+}
+
+async function runItemSync(itemDbId: string): Promise<SyncCounts> {
   const item = await prisma.plaidItem.findUnique({ where: { id: itemDbId } });
   if (!item) throw new Error("Item not found");
 
@@ -160,13 +192,23 @@ export async function syncItem(itemDbId: string): Promise<{ added: number; modif
   return { added, modified, removed };
 }
 
-// Sync every connected item.
-export async function syncAllItems() {
-  const items = await prisma.plaidItem.findMany();
-  const results = [];
-  for (const item of items) {
-    results.push({ itemId: item.id, ...(await syncItem(item.id)) });
-  }
+export type ItemSyncResult =
+  | ({ itemId: string; ok: true } & SyncCounts)
+  | { itemId: string; ok: false; error: string; errorCode: string | null };
+
+// Sync connected items in parallel (all items, or just `itemIds`). One item failing never
+// blocks the others; each item's outcome is returned and persisted on the item.
+export async function syncAllItems(itemIds?: string[]): Promise<ItemSyncResult[]> {
+  const items = await prisma.plaidItem.findMany({
+    where: itemIds ? { id: { in: itemIds } } : undefined,
+  });
+  const settled = await Promise.allSettled(items.map((item) => syncItem(item.id)));
+  const results: ItemSyncResult[] = settled.map((s, i) => {
+    const itemId = items[i].id;
+    if (s.status === "fulfilled") return { itemId, ok: true, ...s.value };
+    const { message, code } = describeError(s.reason);
+    return { itemId, ok: false, error: message, errorCode: code };
+  });
   // Sweep recently-synced transactions for credit-card payments that the direct category
   // mapping missed (e.g. rows tagged only by name), so they're excluded as transfers.
   await classifyCreditCardPayments(prisma, { windowDays: 120 });

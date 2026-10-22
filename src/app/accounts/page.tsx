@@ -9,6 +9,7 @@ import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 export default function AccountsPage() {
   const { data, mutate, isLoading } = useSWR("/api/accounts", fetcher);
   const [syncing, setSyncing] = useState(false);
+  const [resyncing, setResyncing] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const items = data?.items ?? [];
@@ -20,12 +21,27 @@ export default function AccountsPage() {
     try {
       const res = await apiSend("/api/plaid/sync", "POST");
       const t = res.totals;
-      setMsg(`Synced: ${t.added} added, ${t.modified} updated, ${t.removed} removed.`);
-      mutate();
+      setMsg(
+        `Synced: ${t.added} added, ${t.modified} updated, ${t.removed} removed.` +
+          (res.failed ? ` ${res.failed} institution(s) failed — see below.` : "")
+      );
+      await mutate();
     } catch (e: any) {
       setMsg(e.message || "Sync failed");
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function resync(itemId: string) {
+    setResyncing(itemId);
+    try {
+      await apiSend("/api/plaid/sync", "POST", { itemId });
+    } catch {
+      // per-item outcome is persisted on the item and shown in its status
+    } finally {
+      await mutate();
+      setResyncing(null);
     }
   }
 
@@ -45,7 +61,12 @@ export default function AccountsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-ghost" onClick={sync} disabled={syncing || !items.length}>
+          <button
+            className="btn-ghost inline-flex items-center gap-2"
+            onClick={sync}
+            disabled={syncing || !items.length}
+          >
+            {syncing && <Spinner />}
             {syncing ? "Syncing…" : "Sync now"}
           </button>
           <PlaidLinkButton onLinked={() => mutate()} disabled={!configured} />
@@ -91,16 +112,36 @@ PLAID_ENV="sandbox"`}</pre>
           {items.map((item: any) => (
             <div key={item.id} className="card">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold">
-                  {item.institutionName || "Institution"}
-                </h2>
-                <button
-                  className="text-xs text-red-600 hover:underline"
-                  onClick={() => disconnect(item.id)}
-                >
-                  Disconnect
-                </button>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold">
+                    {item.institutionName || "Institution"}
+                  </h2>
+                  <SyncStatus item={item} syncing={syncing || resyncing === item.id} />
+                </div>
+                <div className="flex items-center gap-3">
+                  {item.lastSyncError && (
+                    <PlaidLinkButton
+                      itemId={item.id}
+                      label={resyncing === item.id ? "Syncing…" : "Reconnect through Plaid"}
+                      onLinked={() => resync(item.id)}
+                      disabled={resyncing === item.id || syncing}
+                      className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50"
+                    />
+                  )}
+                  <button
+                    className="text-xs text-red-600 hover:underline"
+                    onClick={() => disconnect(item.id)}
+                  >
+                    Disconnect
+                  </button>
+                </div>
               </div>
+              {item.lastSyncError && (
+                <p className="mt-1 text-xs text-red-600">
+                  {item.lastSyncError}
+                  {item.lastSyncErrorCode ? ` (${item.lastSyncErrorCode})` : ""}
+                </p>
+              )}
               <div className="mt-3 divide-y divide-surface-border">
                 {item.accounts.map((a: any) => (
                   <div key={a.id} className="flex items-center justify-between py-2.5">
@@ -133,5 +174,44 @@ PLAID_ENV="sandbox"`}</pre>
         </div>
       )}
     </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      aria-label="Syncing"
+      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+    />
+  );
+}
+
+function SyncStatus({ item, syncing }: { item: any; syncing: boolean }) {
+  if (syncing) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
+        <Spinner />
+        Syncing…
+      </span>
+    );
+  }
+  if (item.lastSyncError) {
+    return (
+      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+        Sync failed
+      </span>
+    );
+  }
+  if (!item.lastSyncedAt) {
+    return (
+      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+        Not synced yet
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+      Synced {new Date(item.lastSyncedAt).toLocaleString()}
+    </span>
   );
 }
