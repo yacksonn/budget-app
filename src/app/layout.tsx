@@ -1,0 +1,28 @@
+import type { Metadata } from "next";
+import "./globals.css";
+import { Nav } from "@/components/Nav";
+
+export const metadata: Metadata = {
+  title: "Budget App",
+  description: "A personal budgeting app powered by Plaid",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body className="min-h-screen font-sans antialiased">
+        <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-4 md:px-6">
+          <Nav />
+          <main className="flex-1 py-6">{children}</main>
+          <footer className="py-6 text-center text-xs text-ink-muted">
+            Budget App · local sandbox · data stays on this machine
+          </footer>
+        </div>
+      </body>
+    </html>
+  );
+}

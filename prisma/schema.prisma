@@ -1,0 +1,102 @@
+// Budget App schema.
+// Uses SQLite for a zero-setup local database. To enable multi-machine sync later,
+// change `provider` to "postgresql" and point DATABASE_URL at a hosted Postgres.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model PlaidItem {
+  id              String    @id @default(cuid())
+  itemId          String    @unique
+  accessToken     String
+  institutionName String?
+  institutionId   String?
+  cursor          String? // transactions/sync cursor for incremental updates
+  createdAt       DateTime  @default(now())
+  accounts        Account[]
+}
+
+model Account {
+  id               String        @id @default(cuid())
+  plaidAccountId   String        @unique
+  itemId           String
+  item             PlaidItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  name             String
+  officialName     String?
+  mask             String?
+  type             String?
+  subtype          String?
+  currentBalance   Float?
+  availableBalance Float?
+  currencyCode     String?       @default("USD")
+  createdAt        DateTime      @default(now())
+  transactions     Transaction[]
+}
+
+// group: INCOME | EXPENSE | TRANSFER
+model Category {
+  id           String        @id @default(cuid())
+  name         String
+  group        String        @default("EXPENSE")
+  icon         String? // emoji
+  color        String? // hex
+  isCustom     Boolean       @default(false)
+  plaidPrimary String? // Plaid personal_finance_category.primary for auto-mapping
+  plaidDetailed String? // Plaid personal_finance_category.detailed; takes precedence over plaidPrimary
+  sortOrder    Int           @default(0)
+  parentId     String?
+  parent       Category?     @relation("CategoryTree", fields: [parentId], references: [id])
+  children     Category[]    @relation("CategoryTree")
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@unique([name, parentId])
+}
+
+model Transaction {
+  id                 String    @id @default(cuid())
+  plaidTransactionId String    @unique
+  accountId          String
+  account            Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  date               DateTime
+  name               String
+  merchantName       String?
+  // Positive = money spent (outflow), negative = money in (inflow). Matches Plaid convention.
+  amount             Float
+  // Raw Plaid personal_finance_category, stored for reliable recognition + auditing.
+  plaidPrimary       String?
+  plaidDetailed      String?
+  currencyCode       String?   @default("USD")
+  pending            Boolean   @default(false)
+  categoryId         String?
+  category           Category? @relation(fields: [categoryId], references: [id])
+  note               String? // free-text note per transaction
+  reviewed           Boolean   @default(false)
+  // Whether this transaction counts toward the monthly "spent" total. Defaults to the
+  // computed spending rule (outflow in a non-transfer category); user can toggle per row.
+  includedInSpending Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([date])
+  @@index([categoryId])
+}
+
+model Budget {
+  id         String   @id @default(cuid())
+  month      String // "YYYY-MM"
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  amount     Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([month, categoryId])
+  @@index([month])
+}
