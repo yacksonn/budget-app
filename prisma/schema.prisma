@@ -3,7 +3,9 @@
 // change `provider` to "postgresql" and point DATABASE_URL at a hosted Postgres.
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  // "client" = TypeScript query compiler (no Rust binary), required to run on Cloudflare Workers.
+  engineType = "client"
 }
 
 datasource db {
