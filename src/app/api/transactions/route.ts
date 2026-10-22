@@ -18,8 +18,19 @@ export async function GET(req: Request) {
     where.date = { gte: start, lt: end };
   }
   if (accountId) where.accountId = accountId;
-  if (categoryId) {
-    where.categoryId = categoryId === "none" ? null : categoryId;
+  if (categoryId === "none") {
+    where.categoryId = null;
+  } else if (categoryId) {
+    // A parent category ("Food & Dining (all)") matches itself and all its subcategories.
+    const match: Prisma.TransactionWhereInput = {
+      category: { OR: [{ id: categoryId }, { parentId: categoryId }] },
+    };
+    // The seeded top-level "Uncategorized" bucket also covers rows with no category at all.
+    const cat = await prisma.category.findUnique({ where: { id: categoryId } });
+    where.AND =
+      cat?.name === "Uncategorized" && !cat.parentId
+        ? [{ OR: [match, { categoryId: null }] }]
+        : [match];
   }
   if (reviewed === "true") where.reviewed = true;
   if (reviewed === "false") where.reviewed = false;

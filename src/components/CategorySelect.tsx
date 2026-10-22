@@ -14,12 +14,14 @@ export function CategorySelect({
   value,
   onChange,
   allowNone = true,
+  noneLabel = "Uncategorized",
   className = "",
 }: {
   categories: Cat[];
   value: string | null;
   onChange: (id: string | null) => void;
   allowNone?: boolean;
+  noneLabel?: string;
   className?: string;
 }) {
   const parents = categories.filter((c) => !c.parentId);
@@ -30,7 +32,7 @@ export function CategorySelect({
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value || null)}
     >
-      {allowNone && <option value="">Uncategorized</option>}
+      {allowNone && <option value="">{noneLabel}</option>}
       {parents.map((p) => {
         const children = categories.filter((c) => c.parentId === p.id);
         return (

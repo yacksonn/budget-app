@@ -34,6 +34,7 @@ export default function TransactionsPage() {
     fetcher
   );
   const transactions = data?.transactions ?? [];
+  const filtered = Boolean(search || accountId || categoryId || onlyUnreviewed);
 
   const spent = transactions
     .filter((t: any) => t.includedInSpending)
@@ -76,7 +77,7 @@ export default function TransactionsPage() {
             categories={categories}
             value={categoryId}
             onChange={(id) => setCategoryId(id ?? "")}
-            allowNone={false}
+            noneLabel="All categories"
           />
           <label className="flex items-center gap-2 text-sm text-ink-soft">
             <input
@@ -94,7 +95,9 @@ export default function TransactionsPage() {
           <p className="py-6 text-center text-sm text-ink-muted">Loading…</p>
         ) : transactions.length === 0 ? (
           <p className="py-6 text-center text-sm text-ink-muted">
-            No transactions for this month. Connect an account and sync on the Accounts page.
+            {filtered
+              ? "No transactions match these filters this month."
+              : "No transactions for this month. Connect an account and sync on the Accounts page."}
           </p>
         ) : (
           <div className="divide-y divide-surface-border">
