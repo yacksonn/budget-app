@@ -16,5 +16,12 @@
   ],
   "observability": {
     "enabled": true
+  },
+  // Non-secret config. Secrets (APP_PASSWORD, DATABASE_URL, DIRECT_URL, PLAID_CLIENT_ID,
+  // PLAID_SECRET) are set as type "Secret" in the Cloudflare dashboard, never here.
+  "vars": {
+    "PLAID_ENV": "production",
+    "PLAID_PRODUCTS": "transactions",
+    "PLAID_COUNTRY_CODES": "US"
   }
 }

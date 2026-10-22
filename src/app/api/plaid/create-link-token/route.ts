@@ -4,8 +4,8 @@ import { prisma } from "@/lib/db";
 import {
   plaidClient,
   plaidConfigured,
-  PLAID_PRODUCTS,
-  PLAID_COUNTRY_CODES,
+  plaidProducts,
+  plaidCountryCodes,
 } from "@/lib/plaid";
 
 export async function POST(req: Request) {
@@ -33,8 +33,8 @@ export async function POST(req: Request) {
       // Update mode reuses the item's existing products, so `products` is omitted there.
       ...(accessToken
         ? { access_token: accessToken }
-        : { products: PLAID_PRODUCTS as Products[] }),
-      country_codes: PLAID_COUNTRY_CODES as CountryCode[],
+        : { products: plaidProducts() as Products[] }),
+      country_codes: plaidCountryCodes() as CountryCode[],
       language: "en",
     });
     return NextResponse.json({ link_token: res.data.link_token });
