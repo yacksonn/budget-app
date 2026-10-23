@@ -23,5 +23,14 @@
     "PLAID_ENV": "production",
     "PLAID_PRODUCTS": "transactions",
     "PLAID_COUNTRY_CODES": "US"
+  },
+  // Settings for Preview deployments (non-production branches). Vars aren't inherited from
+  // the top level. Preview secrets are set separately on the Preview base config.
+  "previews": {
+    "vars": {
+      "PLAID_ENV": "production",
+      "PLAID_PRODUCTS": "transactions",
+      "PLAID_COUNTRY_CODES": "US"
+    }
   }
 }
