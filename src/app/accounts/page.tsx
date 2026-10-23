@@ -2,12 +2,12 @@
 
 import useSWR from "swr";
 import { useState } from "react";
-import { fetcher, apiSend } from "@/lib/fetcher";
+import { fetcher, apiSend, invalidate } from "@/lib/fetcher";
 import { formatCurrency } from "@/lib/format";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 
 export default function AccountsPage() {
-  const { data, mutate, isLoading } = useSWR("/api/accounts", fetcher);
+  const { data, isLoading } = useSWR("/api/accounts", fetcher);
   const [syncing, setSyncing] = useState(false);
   const [resyncing, setResyncing] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -25,7 +25,7 @@ export default function AccountsPage() {
         `Synced: ${t.added} added, ${t.modified} updated, ${t.removed} removed.` +
           (res.failed ? ` ${res.failed} institution(s) failed — see below.` : "")
       );
-      await mutate();
+      await invalidate();
     } catch (e: any) {
       setMsg(e.message || "Sync failed");
     } finally {
@@ -40,7 +40,7 @@ export default function AccountsPage() {
     } catch {
       // per-item outcome is persisted on the item and shown in its status
     } finally {
-      await mutate();
+      await invalidate();
       setResyncing(null);
     }
   }
@@ -48,7 +48,7 @@ export default function AccountsPage() {
   async function disconnect(itemId: string) {
     if (!confirm("Disconnect this institution and delete its transactions?")) return;
     await apiSend(`/api/accounts?itemId=${itemId}`, "DELETE");
-    mutate();
+    invalidate();
   }
 
   return (
@@ -69,7 +69,7 @@ export default function AccountsPage() {
             {syncing && <Spinner />}
             {syncing ? "Syncing…" : "Sync now"}
           </button>
-          <PlaidLinkButton onLinked={() => mutate()} disabled={!configured} />
+          <PlaidLinkButton onLinked={() => invalidate()} disabled={!configured} />
         </div>
       </div>
 

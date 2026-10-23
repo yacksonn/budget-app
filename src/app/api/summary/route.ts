@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { monthRange, shiftMonth, monthLabel } from "@/lib/format";
 
-// Transfers are excluded from income/spending totals.
-const isTransfer = (group?: string | null) => group === "TRANSFER";
+// Aggregation runs in Postgres; only small grouped rows come back. Month boundaries are
+// still computed here (monthRange) and passed in, so bucketing matches the app exactly.
+// `date` is a timestamp without time zone holding UTC, hence the ISO-string params.
+const ts = (d: Date) => d.toISOString();
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -14,11 +16,39 @@ export async function GET(req: Request) {
   const firstTrendMonth = shiftMonth(month, -5);
   const windowStart = monthRange(firstTrendMonth).start;
   const windowEnd = monthRange(month).end;
+  const { start, end } = monthRange(month);
 
-  const txs = await prisma.transaction.findMany({
-    where: { date: { gte: windowStart, lt: windowEnd } },
-    include: { category: { include: { parent: true } } },
-  });
+  const [days, parents, accounts] = await Promise.all([
+    // Per-day totals across the window. Spending follows the per-transaction
+    // includedInSpending checkbox; income is money in, excluding transfers.
+    prisma.$queryRaw<{ date: Date; spending: number; income: number }[]>`
+      SELECT t."date",
+        COALESCE(SUM(CASE WHEN t."includedInSpending" THEN t."amount" END), 0)::float8 AS spending,
+        COALESCE(SUM(CASE WHEN t."amount" < 0 AND c."group" IS DISTINCT FROM 'TRANSFER'
+                          THEN -t."amount" END), 0)::float8 AS income
+      FROM "Transaction" t
+      LEFT JOIN "Category" c ON c."id" = t."categoryId"
+      WHERE t."date" >= ${ts(windowStart)}::timestamp(3) AND t."date" < ${ts(windowEnd)}::timestamp(3)
+      GROUP BY t."date"`,
+    // Selected month's spending by top-level category (a subcategory rolls up to its parent).
+    prisma.$queryRaw<
+      { id: string | null; name: string | null; icon: string | null; color: string | null; amount: number }[]
+    >`
+      SELECT
+        CASE WHEN p."id" IS NOT NULL THEN p."id" ELSE c."id" END AS id,
+        CASE WHEN p."id" IS NOT NULL THEN p."name" ELSE c."name" END AS name,
+        CASE WHEN p."id" IS NOT NULL THEN p."icon" ELSE c."icon" END AS icon,
+        CASE WHEN p."id" IS NOT NULL THEN p."color" ELSE c."color" END AS color,
+        SUM(t."amount")::float8 AS amount
+      FROM "Transaction" t
+      LEFT JOIN "Category" c ON c."id" = t."categoryId"
+      LEFT JOIN "Category" p ON p."id" = c."parentId"
+      WHERE t."includedInSpending"
+        AND t."date" >= ${ts(start)}::timestamp(3) AND t."date" < ${ts(end)}::timestamp(3)
+      GROUP BY 1, 2, 3, 4
+      ORDER BY amount DESC`,
+    prisma.account.aggregate({ _sum: { currentBalance: true }, _count: true }),
+  ]);
 
   // Build the 6 month keys.
   const trendMonths: string[] = [];
@@ -28,58 +58,32 @@ export async function GET(req: Request) {
     const { start, end } = monthRange(m);
     let income = 0;
     let spending = 0;
-    for (const t of txs) {
-      if (t.date < start || t.date >= end) continue;
-      // Spending follows the per-transaction includedInSpending checkbox.
-      if (t.includedInSpending) spending += t.amount;
-      // Income is unaffected by the checkbox: money in, excluding transfers.
-      if (!isTransfer(t.category?.group) && t.amount < 0) income += -t.amount;
+    for (const d of days) {
+      if (d.date < start || d.date >= end) continue;
+      spending += d.spending;
+      income += d.income;
     }
     return { month: m, label: monthLabel(m), income, spending, net: income - spending };
   });
 
-  // Current-month detail.
-  const { start, end } = monthRange(month);
-  let income = 0;
-  let spending = 0;
-  const byParentMap = new Map<
-    string,
-    { id: string | null; name: string; icon: string | null; color: string | null; amount: number }
-  >();
+  // Current month = last trend bucket (same window and rules).
+  const { income, spending } = trend[trend.length - 1];
 
-  for (const t of txs) {
-    if (t.date < start || t.date >= end) continue;
-
-    // Spending + category breakdown follow the includedInSpending checkbox.
-    if (t.includedInSpending) {
-      spending += t.amount;
-      const parent = t.category?.parent ?? t.category ?? null;
-      const key = parent?.id ?? "uncategorized";
-      const cur = byParentMap.get(key) ?? {
-        id: parent?.id ?? null,
-        name: parent?.name ?? "Uncategorized",
-        icon: parent?.icon ?? "❓",
-        color: parent?.color ?? "#cbd5e1",
-        amount: 0,
-      };
-      cur.amount += t.amount;
-      byParentMap.set(key, cur);
-    }
-
-    // Income is unaffected by the checkbox: money in, excluding transfers.
-    if (!isTransfer(t.category?.group) && t.amount < 0) income += -t.amount;
-  }
-
-  const byParent = Array.from(byParentMap.values()).sort((a, b) => b.amount - a.amount);
+  const byParent = parents.map((p) => ({
+    id: p.id,
+    name: p.name ?? "Uncategorized",
+    icon: p.icon ?? "❓",
+    color: p.color ?? "#cbd5e1",
+    amount: p.amount,
+  }));
 
   // Per-day spending for the selected month. Plaid dates are stored as UTC midnight,
   // so bucket by the UTC calendar date rather than local time.
   const spentByDay = new Map<string, number>();
-  for (const t of txs) {
-    if (!t.includedInSpending) continue;
-    const key = t.date.toISOString().slice(0, 10);
+  for (const d of days) {
+    const key = d.date.toISOString().slice(0, 10);
     if (!key.startsWith(month)) continue;
-    spentByDay.set(key, (spentByDay.get(key) ?? 0) + t.amount);
+    spentByDay.set(key, (spentByDay.get(key) ?? 0) + d.spending);
   }
 
   const [y, m] = month.split("-").map(Number);
@@ -104,9 +108,6 @@ export async function GET(req: Request) {
     daily.push({ day: d, date, spent, cumulative });
   }
 
-  const accounts = await prisma.account.findMany();
-  const accountsBalance = accounts.reduce((s, a) => s + (a.currentBalance ?? 0), 0);
-
   return NextResponse.json({
     month,
     label: monthLabel(month),
@@ -116,7 +117,7 @@ export async function GET(req: Request) {
     byParent,
     trend,
     daily,
-    accountsBalance,
-    accountCount: accounts.length,
+    accountsBalance: accounts._sum.currentBalance ?? 0,
+    accountCount: accounts._count,
   });
 }

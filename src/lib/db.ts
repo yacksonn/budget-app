@@ -2,14 +2,16 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
+const isWorkers = typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
+
 function createClient() {
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    // On Workers, one connection per request: each extra connection costs a TLS + SCRAM
+    // handshake (CPU time); parallel queries in a request just queue on it.
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL, ...(isWorkers && { max: 1 }) }),
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 }
-
-const isWorkers = typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
 
 // On Workers, a DB connection opened in one request can't be used by another, so keep
 // one client per request (keyed on the request's ExecutionContext).

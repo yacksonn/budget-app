@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { useState } from "react";
-import { fetcher, apiSend } from "@/lib/fetcher";
+import { fetcher, apiSend, invalidate } from "@/lib/fetcher";
 
 const GROUP_LABELS: Record<string, string> = {
   INCOME: "Income",
@@ -11,7 +11,7 @@ const GROUP_LABELS: Record<string, string> = {
 };
 
 export default function CategoriesPage() {
-  const { data, mutate } = useSWR("/api/categories", fetcher);
+  const { data } = useSWR("/api/categories", fetcher);
   const categories = data?.categories ?? [];
   const parents = categories.filter((c: any) => !c.parentId);
 
@@ -35,7 +35,7 @@ export default function CategoriesPage() {
         icon,
       });
       setName("");
-      mutate();
+      invalidate();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -47,7 +47,7 @@ export default function CategoriesPage() {
     const next = prompt("Rename category", current);
     if (next && next.trim() && next !== current) {
       await apiSend("/api/categories", "PATCH", { id, name: next.trim() });
-      mutate();
+      invalidate();
     }
   }
 
@@ -55,7 +55,7 @@ export default function CategoriesPage() {
     if (!confirm("Delete this category? Its transactions become uncategorized.")) return;
     try {
       await apiSend(`/api/categories?id=${id}`, "DELETE");
-      mutate();
+      invalidate();
     } catch (e: any) {
       alert(e.message);
     }

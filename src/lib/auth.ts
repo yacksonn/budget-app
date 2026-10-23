@@ -8,6 +8,8 @@ export const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 export async function sessionToken(): Promise<string> {
   const password = process.env.APP_PASSWORD;
   if (!password) throw new Error("APP_PASSWORD is not set");
+  // Computed once per password and reused across requests (it only depends on the password).
+  if (cachedToken?.password === password) return cachedToken.token;
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -17,8 +19,12 @@ export async function sessionToken(): Promise<string> {
     ["sign"]
   );
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode("budget-app-session-v1"));
-  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
+  const token = Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
+  cachedToken = { password, token };
+  return token;
 }
+
+let cachedToken: { password: string; token: string } | null = null;
 
 // Constant-time string comparison.
 export function safeEqual(a: string, b: string): boolean {

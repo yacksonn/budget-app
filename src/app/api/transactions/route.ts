@@ -3,6 +3,39 @@ import { prisma } from "@/lib/db";
 import { monthRange } from "@/lib/format";
 import type { Prisma } from "@prisma/client";
 
+// Only the relation fields the UI renders (instead of full account/category rows).
+const txSelect = {
+  id: true,
+  plaidTransactionId: true,
+  accountId: true,
+  date: true,
+  name: true,
+  merchantName: true,
+  amount: true,
+  plaidPrimary: true,
+  plaidDetailed: true,
+  currencyCode: true,
+  pending: true,
+  categoryId: true,
+  note: true,
+  reviewed: true,
+  includedInSpending: true,
+  createdAt: true,
+  updatedAt: true,
+  account: { select: { id: true, name: true, mask: true } },
+  category: {
+    select: {
+      id: true,
+      name: true,
+      icon: true,
+      color: true,
+      group: true,
+      parentId: true,
+      parent: { select: { id: true, name: true } },
+    },
+  },
+} satisfies Prisma.TransactionSelect;
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const month = searchParams.get("month");
@@ -10,6 +43,7 @@ export async function GET(req: Request) {
   const categoryId = searchParams.get("categoryId");
   const search = searchParams.get("search");
   const reviewed = searchParams.get("reviewed"); // "true" | "false" | null
+  const limit = Number(searchParams.get("limit")) || undefined; // e.g. dashboard "recent"
 
   const where: Prisma.TransactionWhereInput = {};
 
@@ -26,7 +60,10 @@ export async function GET(req: Request) {
       category: { OR: [{ id: categoryId }, { parentId: categoryId }] },
     };
     // The seeded top-level "Uncategorized" bucket also covers rows with no category at all.
-    const cat = await prisma.category.findUnique({ where: { id: categoryId } });
+    const cat = await prisma.category.findUnique({
+      where: { id: categoryId },
+      select: { name: true, parentId: true },
+    });
     where.AND =
       cat?.name === "Uncategorized" && !cat.parentId
         ? [{ OR: [match, { categoryId: null }] }]
@@ -44,11 +81,9 @@ export async function GET(req: Request) {
 
   const transactions = await prisma.transaction.findMany({
     where,
-    include: {
-      account: true,
-      category: { include: { parent: true } },
-    },
+    select: txSelect,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    take: limit,
   });
 
   return NextResponse.json({ transactions });
@@ -72,7 +107,7 @@ export async function PATCH(req: Request) {
   const updated = await prisma.transaction.update({
     where: { id },
     data,
-    include: { account: true, category: { include: { parent: true } } },
+    select: txSelect,
   });
 
   return NextResponse.json({ transaction: updated });

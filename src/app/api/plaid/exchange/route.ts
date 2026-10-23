@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     });
 
     // Pull accounts + initial transactions right away.
-    const result = await syncItem(item.id);
+    const result = await syncItem(item);
 
     return NextResponse.json({ ok: true, itemId: item.id, ...result });
   } catch (err: any) {

@@ -13,25 +13,31 @@ function env(name: string): string | undefined {
   return process.env[name];
 }
 
-function createClient() {
+// PlaidApi holds no connections, so one instance can be reused across requests. Rebuilt
+// only if the credentials/environment change.
+let cached: { key: string; client: PlaidApi } | null = null;
+
+function getClient(): PlaidApi {
   const plaidEnv = (env("PLAID_ENV") || "sandbox") as keyof typeof PlaidEnvironments;
-  return new PlaidApi(
-    new Configuration({
-      basePath: PlaidEnvironments[plaidEnv],
-      baseOptions: {
-        headers: {
-          "PLAID-CLIENT-ID": env("PLAID_CLIENT_ID"),
-          "PLAID-SECRET": env("PLAID_SECRET"),
-        },
-      },
-    })
-  );
+  const clientId = env("PLAID_CLIENT_ID");
+  const secret = env("PLAID_SECRET");
+  const key = `${plaidEnv}:${clientId}:${secret}`;
+  if (cached?.key !== key) {
+    const client = new PlaidApi(
+      new Configuration({
+        basePath: PlaidEnvironments[plaidEnv],
+        baseOptions: { headers: { "PLAID-CLIENT-ID": clientId, "PLAID-SECRET": secret } },
+      })
+    );
+    cached = { key, client };
+  }
+  return cached.client;
 }
 
-// Same `plaidClient.method()` API as before; built on each access from the current env.
+// Same `plaidClient.method()` API as before; resolves to the cached client on each access.
 export const plaidClient = new Proxy({} as PlaidApi, {
   get(_, prop) {
-    const client = createClient();
+    const client = getClient();
     const value = Reflect.get(client, prop);
     return typeof value === "function" ? value.bind(client) : value;
   },

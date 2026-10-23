@@ -46,7 +46,7 @@ function StatCard({
 export default function DashboardPage() {
   const [month, setMonth] = useState(currentMonth());
   const { data: summary, isLoading } = useSWR(`/api/summary?month=${month}`, fetcher);
-  const { data: txData } = useSWR(`/api/transactions?month=${month}`, fetcher);
+  const { data: txData } = useSWR(`/api/transactions?month=${month}&limit=8`, fetcher);
 
   const income = summary?.income ?? 0;
   const spending = summary?.spending ?? 0;

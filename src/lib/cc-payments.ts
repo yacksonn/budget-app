@@ -98,12 +98,18 @@ export type ClassifyResult = {
  */
 export async function classifyCreditCardPayments(
   prisma: PrismaClient,
-  opts: { windowDays: number; includeReviewed?: boolean }
+  // `ccCategoryId` skips the category lookup when the caller already has it.
+  opts: { windowDays: number; includeReviewed?: boolean; ccCategoryId?: string }
 ): Promise<ClassifyResult> {
-  const ccCategory = await prisma.category.findFirst({
-    where: { name: CC_PAYMENT_CATEGORY_NAME, group: "TRANSFER" },
-  });
-  if (!ccCategory) {
+  const ccCategoryId =
+    opts.ccCategoryId ??
+    (
+      await prisma.category.findFirst({
+        where: { name: CC_PAYMENT_CATEGORY_NAME, group: "TRANSFER" },
+        select: { id: true },
+      })
+    )?.id;
+  if (!ccCategoryId) {
     throw new Error(
       `"${CC_PAYMENT_CATEGORY_NAME}" TRANSFER category not found — run \`npm run db:seed\` first.`
     );
@@ -112,20 +118,30 @@ export async function classifyCreditCardPayments(
   const since = new Date();
   since.setDate(since.getDate() - opts.windowDays);
 
+  // Only candidates: uncategorized or in a non-transfer category (that also excludes rows
+  // already in the credit-card category, and leaves other transfers alone).
   const txs = await prisma.transaction.findMany({
     where: {
       date: { gte: since },
       ...(opts.includeReviewed ? {} : { reviewed: false }),
+      OR: [{ categoryId: null }, { category: { group: { not: "TRANSFER" } } }],
     },
-    include: { account: true, category: true },
+    select: {
+      id: true,
+      name: true,
+      amount: true,
+      reviewed: true,
+      plaidPrimary: true,
+      plaidDetailed: true,
+      account: { select: { type: true } },
+      category: { select: { name: true } },
+    },
   });
 
   const result: ClassifyResult = { cardSide: 0, depositorySide: 0, total: 0, changes: [] };
+  const ids: string[] = [];
 
   for (const t of txs) {
-    if (t.categoryId === ccCategory.id) continue; // already correct
-    if (t.category?.group === "TRANSFER") continue; // leave other transfers alone
-
     const isCard = isCreditCardPayment({
       plaidPrimary: t.plaidPrimary,
       plaidDetailed: t.plaidDetailed,
@@ -135,12 +151,7 @@ export async function classifyCreditCardPayments(
     });
     if (!isCard) continue;
 
-    await prisma.transaction.update({
-      where: { id: t.id },
-      // Recognized as a transfer → also drop it from the monthly spend total.
-      data: { categoryId: ccCategory.id, includedInSpending: false },
-    });
-
+    ids.push(t.id);
     result.changes.push({
       name: t.name,
       amount: t.amount,
@@ -150,6 +161,14 @@ export async function classifyCreditCardPayments(
     if (t.amount < 0) result.cardSide++;
     else result.depositorySide++;
     result.total++;
+  }
+
+  if (ids.length) {
+    await prisma.transaction.updateMany({
+      where: { id: { in: ids } },
+      // Recognized as a transfer → also drop it from the monthly spend total.
+      data: { categoryId: ccCategoryId, includedInSpending: false },
+    });
   }
 
   return result;

@@ -1,8 +1,8 @@
 "use client";
 
 import useSWR from "swr";
-import { useMemo, useState } from "react";
-import { fetcher } from "@/lib/fetcher";
+import { useEffect, useMemo, useState } from "react";
+import { fetcher, invalidate } from "@/lib/fetcher";
 import { currentMonth } from "@/lib/format";
 import { MonthPicker } from "@/components/MonthPicker";
 import { TransactionRow } from "@/components/TransactionRow";
@@ -14,6 +14,12 @@ export default function TransactionsPage() {
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>("");
   const [onlyUnreviewed, setOnlyUnreviewed] = useState(false);
+  // Query the server only after typing pauses, not on every keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const { data: catData } = useSWR("/api/categories", fetcher);
   const { data: acctData } = useSWR("/api/accounts", fetcher);
@@ -24,17 +30,33 @@ export default function TransactionsPage() {
   );
 
   const params = new URLSearchParams({ month });
-  if (search) params.set("search", search);
+  if (debouncedSearch) params.set("search", debouncedSearch);
   if (accountId) params.set("accountId", accountId);
   if (categoryId) params.set("categoryId", categoryId);
   if (onlyUnreviewed) params.set("reviewed", "false");
 
-  const { data, mutate, isLoading } = useSWR(
-    `/api/transactions?${params.toString()}`,
-    fetcher
-  );
+  const listKey = `/api/transactions?${params.toString()}`;
+  const { data, mutate, isLoading } = useSWR(listKey, fetcher);
   const transactions = data?.transactions ?? [];
   const filtered = Boolean(search || accountId || categoryId || onlyUnreviewed);
+
+  // Patch the edited row into the cached list instead of refetching the whole month. With a
+  // filter active the row may no longer match, so refetch then. Other views that depend on
+  // transactions (summary, dashboard's recent list, category counts) are invalidated.
+  function onChanged(updated: any, body: any) {
+    if (filtered) {
+      mutate();
+    } else {
+      mutate(
+        (d: any) =>
+          d && { ...d, transactions: d.transactions.map((t: any) => (t.id === updated.id ? updated : t)) },
+        { revalidate: false }
+      );
+    }
+    const prefixes = ["/api/summary", "/api/transactions"];
+    if ("categoryId" in body) prefixes.push("/api/categories");
+    invalidate(prefixes, listKey);
+  }
 
   const spent = transactions
     .filter((t: any) => t.includedInSpending)
@@ -106,7 +128,7 @@ export default function TransactionsPage() {
                 key={tx.id}
                 tx={tx}
                 categories={categories}
-                onChanged={() => mutate()}
+                onChanged={onChanged}
               />
             ))}
           </div>

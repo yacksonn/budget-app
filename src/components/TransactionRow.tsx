@@ -12,7 +12,7 @@ export function TransactionRow({
 }: {
   tx: any;
   categories: any[];
-  onChanged: () => void;
+  onChanged: (updated: any, body: any) => void;
 }) {
   const [noteOpen, setNoteOpen] = useState(Boolean(tx.note));
   const [note, setNote] = useState(tx.note ?? "");
@@ -24,8 +24,8 @@ export function TransactionRow({
   async function patch(body: any) {
     setSaving(true);
     try {
-      await apiSend("/api/transactions", "PATCH", { id: tx.id, ...body });
-      onChanged();
+      const res = await apiSend("/api/transactions", "PATCH", { id: tx.id, ...body });
+      onChanged(res.transaction, body);
     } finally {
       setSaving(false);
     }
