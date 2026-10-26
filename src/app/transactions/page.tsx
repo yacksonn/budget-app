@@ -15,12 +15,6 @@ export default function TransactionsPage() {
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>("");
   const [onlyUnreviewed, setOnlyUnreviewed] = useState(false);
-  // Query the server only after typing pauses, not on every keystroke.
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
 
   const { data: catData } = useSWR("/api/categories", fetcher);
   const { data: acctData } = useSWR("/api/accounts", fetcher);
@@ -30,29 +24,42 @@ export default function TransactionsPage() {
     [acctData]
   );
 
-  const params = new URLSearchParams({ month });
-  if (debouncedSearch) params.set("search", debouncedSearch);
-  if (accountId) params.set("accountId", accountId);
-  if (categoryId) params.set("categoryId", categoryId);
-  if (onlyUnreviewed) params.set("reviewed", "false");
-
-  const listKey = `/api/transactions?${params.toString()}`;
+  // Fetch the whole month once; every filter runs on the cached list, so changing a filter
+  // (or editing a row so it no longer matches) never refetches.
+  const listKey = `/api/transactions?${new URLSearchParams({ month })}`;
   const { data, mutate, isLoading } = useSWR(listKey, fetcher);
-  const transactions = data?.transactions ?? [];
+  const allTransactions = data?.transactions ?? [];
+
+  const q = search.trim().toLowerCase();
+  const selectedCat = categories.find((c: any) => c.id === categoryId);
+  // The seeded top-level "Uncategorized" bucket also covers rows with no category at all.
+  const matchUncategorized = selectedCat?.name === "Uncategorized" && !selectedCat.parentId;
+  const transactions = allTransactions.filter(
+    (t: any) =>
+      (!onlyUnreviewed || !t.reviewed) &&
+      (!accountId || t.accountId === accountId) &&
+      // A parent category ("Food & Dining (all)") matches itself and all its subcategories.
+      (!categoryId ||
+        t.categoryId === categoryId ||
+        t.category?.parentId === categoryId ||
+        (matchUncategorized && !t.categoryId)) &&
+      (!q ||
+        [t.name, t.merchantName, t.note].some((s) => s?.toLowerCase().includes(q)))
+  );
   const filtered = Boolean(search || accountId || categoryId || onlyUnreviewed);
 
   const [error, setError] = useState<string | null>(null);
 
   // When the write queue drains it refreshes dependent views (summary, dashboard, category
-  // counts). This list already shows the edits, so it's skipped unless a filter is active
-  // (the row may no longer match) or a write failed (refetch rolls back the failed change).
+  // counts). This list already shows the edits, so it's skipped unless a write failed
+  // (refetch rolls back the failed change).
   useEffect(() => {
     setQueueListener({
       onError: (id) => {
-        const tx = transactions.find((t: any) => t.id === id);
+        const tx = allTransactions.find((t: any) => t.id === id);
         setError(`Couldn't save changes to ${tx ? tx.merchantName || tx.name : "a transaction"}.`);
       },
-      skipKey: () => (filtered ? undefined : listKey),
+      skipKey: () => listKey,
     });
   });
   useEffect(() => () => setQueueListener(null), []);
