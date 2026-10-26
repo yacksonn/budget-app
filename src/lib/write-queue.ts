@@ -1,3 +1,4 @@
+import { mutate } from "swr";
 import { apiSend, invalidate } from "@/lib/fetcher";
 
 // Transaction edits are applied to the UI immediately and their DB writes queued here.
@@ -39,7 +40,10 @@ async function run() {
     const [id, patch] = pending.entries().next().value!;
     pending.delete(id);
     try {
-      await apiSend("/api/transactions", "PATCH", { id, ...patch });
+      const { transaction } = await apiSend("/api/transactions", "PATCH", { id, ...patch });
+      // Reconcile cached lists with the saved row, unless a newer edit to it is still
+      // queued (its optimistic value is what should stay on screen).
+      if (!pending.has(id)) applyServerRow(transaction);
     } catch (err) {
       failed = true;
       if (listener) listener.onError(id, err);
@@ -55,6 +59,15 @@ async function run() {
   invalidate(prefixes, failed ? undefined : listener?.skipKey());
   failed = false;
   touchedCategory = false;
+}
+
+function applyServerRow(row: { id: string }) {
+  void mutate(
+    (key) => typeof key === "string" && key.startsWith("/api/transactions"),
+    (d: any) =>
+      d && { ...d, transactions: d.transactions.map((t: any) => (t.id === row.id ? row : t)) },
+    { revalidate: false }
+  );
 }
 
 if (typeof window !== "undefined") {
