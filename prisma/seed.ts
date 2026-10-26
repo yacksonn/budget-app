@@ -127,6 +127,14 @@ const TREE: SeedParent[] = [
     children: [
       { name: "Bank Fees", plaidPrimary: "BANK_FEES" },
       { name: "Loan Payment", plaidPrimary: "LOAN_PAYMENTS" },
+    ],
+  },
+  {
+    name: "Church",
+    group: "EXPENSE",
+    icon: "⛪",
+    color: "#6366f1",
+    children: [
       { name: "Government & Non-Profit", plaidPrimary: "GOVERNMENT_AND_NON_PROFIT" },
     ],
   },
