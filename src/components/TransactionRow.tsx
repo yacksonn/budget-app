@@ -1,34 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { apiSend } from "@/lib/fetcher";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { CategorySelect } from "@/components/CategorySelect";
 
 export function TransactionRow({
   tx,
   categories,
-  onChanged,
+  onEdit,
 }: {
   tx: any;
   categories: any[];
-  onChanged: (updated: any, body: any) => void;
+  onEdit: (id: string, body: any) => void;
 }) {
   const [noteOpen, setNoteOpen] = useState(Boolean(tx.note));
   const [note, setNote] = useState(tx.note ?? "");
-  const [saving, setSaving] = useState(false);
 
   // Plaid convention: positive amount = money out (expense).
   const isExpense = tx.amount > 0;
 
-  async function patch(body: any) {
-    setSaving(true);
-    try {
-      const res = await apiSend("/api/transactions", "PATCH", { id: tx.id, ...body });
-      onChanged(res.transaction, body);
-    } finally {
-      setSaving(false);
-    }
+  function patch(body: any) {
+    onEdit(tx.id, body);
   }
 
   return (
@@ -85,7 +77,6 @@ export function TransactionRow({
           <input
             type="checkbox"
             checked={Boolean(tx.includedInSpending)}
-            disabled={saving}
             onChange={(e) => patch({ includedInSpending: e.target.checked })}
           />
           in spend

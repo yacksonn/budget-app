@@ -2,7 +2,8 @@
 
 import useSWR from "swr";
 import { useEffect, useMemo, useState } from "react";
-import { fetcher, invalidate } from "@/lib/fetcher";
+import { fetcher } from "@/lib/fetcher";
+import { enqueue, setQueueListener } from "@/lib/write-queue";
 import { currentMonth } from "@/lib/format";
 import { MonthPicker } from "@/components/MonthPicker";
 import { TransactionRow } from "@/components/TransactionRow";
@@ -40,22 +41,37 @@ export default function TransactionsPage() {
   const transactions = data?.transactions ?? [];
   const filtered = Boolean(search || accountId || categoryId || onlyUnreviewed);
 
-  // Patch the edited row into the cached list instead of refetching the whole month. With a
-  // filter active the row may no longer match, so refetch then. Other views that depend on
-  // transactions (summary, dashboard's recent list, category counts) are invalidated.
-  function onChanged(updated: any, body: any) {
-    if (filtered) {
-      mutate();
-    } else {
-      mutate(
-        (d: any) =>
-          d && { ...d, transactions: d.transactions.map((t: any) => (t.id === updated.id ? updated : t)) },
-        { revalidate: false }
-      );
+  const [error, setError] = useState<string | null>(null);
+
+  // When the write queue drains it refreshes dependent views (summary, dashboard, category
+  // counts). This list already shows the edits, so it's skipped unless a filter is active
+  // (the row may no longer match) or a write failed (refetch rolls back the failed change).
+  useEffect(() => {
+    setQueueListener({
+      onError: (id) => {
+        const tx = transactions.find((t: any) => t.id === id);
+        setError(`Couldn't save changes to ${tx ? tx.merchantName || tx.name : "a transaction"}.`);
+      },
+      skipKey: () => (filtered ? undefined : listKey),
+    });
+  });
+  useEffect(() => () => setQueueListener(null), []);
+
+  // Apply the edit to the cached list right away; the DB write is queued.
+  function onEdit(id: string, body: any) {
+    const patch = { ...body };
+    if ("categoryId" in body) {
+      const c = categories.find((c: any) => c.id === body.categoryId);
+      patch.category = c
+        ? { ...c, parent: categories.find((p: any) => p.id === c.parentId) ?? null }
+        : null;
     }
-    const prefixes = ["/api/summary", "/api/transactions"];
-    if ("categoryId" in body) prefixes.push("/api/categories");
-    invalidate(prefixes, listKey);
+    mutate(
+      (d: any) =>
+        d && { ...d, transactions: d.transactions.map((t: any) => (t.id === id ? { ...t, ...patch } : t)) },
+      { revalidate: false }
+    );
+    enqueue(id, body);
   }
 
   const spent = transactions
@@ -112,6 +128,15 @@ export default function TransactionsPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          <span>{error}</span>
+          <button className="text-xs hover:underline" onClick={() => setError(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="card">
         {isLoading ? (
           <p className="py-6 text-center text-sm text-ink-muted">Loading…</p>
@@ -128,7 +153,7 @@ export default function TransactionsPage() {
                 key={tx.id}
                 tx={tx}
                 categories={categories}
-                onChanged={onChanged}
+                onEdit={onEdit}
               />
             ))}
           </div>
