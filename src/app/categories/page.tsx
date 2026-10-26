@@ -1,6 +1,6 @@
 "use client";
 
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { useState } from "react";
 import { fetcher, apiSend, invalidate } from "@/lib/fetcher";
 
@@ -10,49 +10,109 @@ const GROUP_LABELS: Record<string, string> = {
   TRANSFER: "Transfer",
 };
 
+const KEY = "/api/categories";
+
+// Category writes follow the same pattern as transaction edits: the cached list is updated
+// right away and the DB writes go out one at a time in the background. Once a burst of
+// writes drains, every cached view is refreshed in the background (this list picks up
+// server ids for new rows; a failed write rolls back via the refetch).
+let chain: Promise<void> = Promise.resolve();
+let inFlight = 0;
+
+function optimistic(
+  change: (cats: any[]) => any[],
+  request: () => Promise<unknown>,
+  onError: (msg: string) => void
+) {
+  void mutate(KEY, (d: any) => d && { ...d, categories: change(d.categories) }, { revalidate: false });
+  inFlight++;
+  chain = chain.then(async () => {
+    try {
+      await request();
+    } catch (e: any) {
+      onError(e.message);
+    }
+    if (--inFlight === 0) invalidate();
+  });
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", (e) => {
+    if (!inFlight) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+}
+
 export default function CategoriesPage() {
-  const { data } = useSWR("/api/categories", fetcher);
+  const { data } = useSWR(KEY, fetcher);
   const categories = data?.categories ?? [];
   const parents = categories.filter((c: any) => !c.parentId);
+  // Rows still being created have a temp id; they can't be edited or used as a parent yet.
+  const isSaved = (c: any) => !c.id.startsWith("temp-");
+  const savedParents = parents.filter(isSaved);
 
   const [name, setName] = useState("");
   const [parentId, setParentId] = useState("");
   const [group, setGroup] = useState("EXPENSE");
   const [icon, setIcon] = useState("🏷️");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await apiSend("/api/categories", "POST", {
-        name,
-        parentId: parentId || null,
-        group,
-        icon,
-      });
-      setName("");
-      invalidate();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  async function remove(id: string) {
-    if (!confirm("Delete this category? Its transactions become uncategorized and its budgets are removed.")) return;
-    try {
-      await apiSend(`/api/categories?id=${id}`, "DELETE");
-      invalidate();
-    } catch (e: any) {
-      alert(e.message);
+  function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setError(null);
+    const body = { name: name.trim(), parentId: parentId || null, group, icon };
+    const parent = categories.find((c: any) => c.id === parentId);
+    const temp = {
+      id: `temp-${Date.now()}`,
+      ...body,
+      group: parent ? parent.group : group,
+      icon: icon || (parent ? null : "🏷️"),
+      color: "#6366f1",
+      isCustom: true,
+      sortOrder: 500,
+      _count: { transactions: 0 },
+    };
+    optimistic(
+      (cats) => [...cats, temp],
+      () => apiSend(KEY, "POST", body),
+      setError
+    );
+    setName("");
+  }
+
+  function save(category: any, patch: { name: string; icon: string | null; parentId: string | null; group: string }) {
+    setError(null);
+    const parent = categories.find((c: any) => c.id === patch.parentId);
+    const next = { ...patch, group: parent ? parent.group : patch.group };
+    optimistic(
+      (cats) =>
+        cats.map((c) =>
+          c.id === category.id
+            ? { ...c, ...next }
+            : // A top-level group change carries down to its subcategories.
+              !next.parentId && c.parentId === category.id
+              ? { ...c, group: next.group }
+              : c
+        ),
+      () => apiSend(KEY, "PATCH", { id: category.id, ...patch }),
+      setError
+    );
+  }
+
+  function remove(id: string) {
+    if (categories.some((c: any) => c.parentId === id)) {
+      setError("Move or delete its subcategories first.");
+      return;
     }
+    setError(null);
+    optimistic(
+      (cats) => cats.filter((c) => c.id !== id),
+      () => apiSend(`${KEY}?id=${id}`, "DELETE"),
+      setError
+    );
   }
 
   return (
@@ -83,7 +143,7 @@ export default function CategoriesPage() {
           onChange={(e) => setParentId(e.target.value)}
         >
           <option value="">Top-level category</option>
-          {parents.map((p: any) => (
+          {savedParents.map((p: any) => (
             <option key={p.id} value={p.id}>
               Under {p.name}
             </option>
@@ -100,11 +160,18 @@ export default function CategoriesPage() {
           <option value="INCOME">Income</option>
           <option value="TRANSFER">Transfer</option>
         </select>
-        <button className="btn-primary" disabled={busy}>
+        <button className="btn-primary">
           Add
         </button>
       </form>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          <span>{error}</span>
+          <button className="text-xs hover:underline" onClick={() => setError(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="space-y-4">
         {parents.map((p: any) => {
@@ -127,20 +194,23 @@ export default function CategoriesPage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <button className="text-ink-muted hover:underline" onClick={() => setEditingId(p.id)}>
-                    Edit
-                  </button>
-                  <button className="text-red-600 dark:text-red-400 hover:underline" onClick={() => remove(p.id)}>
-                    Delete
-                  </button>
-                </div>
+                {isSaved(p) && (
+                  <div className="flex items-center gap-3 text-xs">
+                    <button className="text-ink-muted hover:underline" onClick={() => setEditingId(p.id)}>
+                      Edit
+                    </button>
+                    <button className="text-red-600 dark:text-red-400 hover:underline" onClick={() => remove(p.id)}>
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
               {editingId === p.id && (
                 <CategoryEditor
                   category={p}
-                  parents={parents}
+                  parents={savedParents}
                   hasChildren={children.length > 0}
+                  onSave={(patch) => save(p, patch)}
                   onDone={() => setEditingId(null)}
                 />
               )}
@@ -153,20 +223,24 @@ export default function CategoriesPage() {
                     >
                       {c.name}
                       <span className="text-ink-muted">({c._count.transactions})</span>
-                      <button
-                        className="text-ink-muted hover:text-ink"
-                        onClick={() => setEditingId(c.id)}
-                        title="Edit / move"
-                      >
-                        ✎
-                      </button>
-                      <button
-                        className="text-red-500 hover:text-red-700"
-                        onClick={() => remove(c.id)}
-                        title="Delete"
-                      >
-                        ×
-                      </button>
+                      {isSaved(c) && (
+                        <>
+                          <button
+                            className="text-ink-muted hover:text-ink"
+                            onClick={() => setEditingId(c.id)}
+                            title="Edit / move"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            className="text-red-500 hover:text-red-700"
+                            onClick={() => remove(c.id)}
+                            title="Delete"
+                          >
+                            ×
+                          </button>
+                        </>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -177,8 +251,9 @@ export default function CategoriesPage() {
                     <CategoryEditor
                       key={c.id}
                       category={c}
-                      parents={parents}
+                      parents={savedParents}
                       hasChildren={false}
+                      onSave={(patch) => save(c, patch)}
                       onDone={() => setEditingId(null)}
                     />
                   )
@@ -195,40 +270,25 @@ function CategoryEditor({
   category,
   parents,
   hasChildren,
+  onSave,
   onDone,
 }: {
   category: any;
   parents: any[];
   hasChildren: boolean;
+  onSave: (patch: { name: string; icon: string | null; parentId: string | null; group: string }) => void;
   onDone: () => void;
 }) {
   const [icon, setIcon] = useState(category.icon ?? "");
   const [name, setName] = useState(category.name);
   const [parentId, setParentId] = useState(category.parentId ?? "");
   const [group, setGroup] = useState(category.group);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function save(e: React.FormEvent) {
+  function save(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await apiSend("/api/categories", "PATCH", {
-        id: category.id,
-        name: name.trim(),
-        icon: icon || null,
-        parentId: parentId || null,
-        group,
-      });
-      invalidate();
-      onDone();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
+    onSave({ name: name.trim(), icon: icon || null, parentId: parentId || null, group });
+    onDone();
   }
 
   return (
@@ -268,14 +328,13 @@ function CategoryEditor({
           <option value="INCOME">Income</option>
           <option value="TRANSFER">Transfer</option>
         </select>
-        <button className="btn-primary" disabled={busy}>
+        <button className="btn-primary">
           Save
         </button>
         <button type="button" className="text-sm text-ink-muted hover:underline" onClick={onDone}>
           Cancel
         </button>
       </div>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </form>
   );
 }
