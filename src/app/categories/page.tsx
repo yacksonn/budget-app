@@ -43,16 +43,10 @@ export default function CategoriesPage() {
     }
   }
 
-  async function rename(id: string, current: string) {
-    const next = prompt("Rename category", current);
-    if (next && next.trim() && next !== current) {
-      await apiSend("/api/categories", "PATCH", { id, name: next.trim() });
-      invalidate();
-    }
-  }
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   async function remove(id: string) {
-    if (!confirm("Delete this category? Its transactions become uncategorized.")) return;
+    if (!confirm("Delete this category? Its transactions become uncategorized and its budgets are removed.")) return;
     try {
       await apiSend(`/api/categories?id=${id}`, "DELETE");
       invalidate();
@@ -66,7 +60,7 @@ export default function CategoriesPage() {
       <div>
         <h1 className="text-2xl font-bold">Categories</h1>
         <p className="text-sm text-ink-muted">
-          Preset categories are ready to use. Add your own anytime.
+          Add, edit, move, or delete any category.
         </p>
       </div>
 
@@ -134,16 +128,22 @@ export default function CategoriesPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3 text-xs">
-                  <button className="text-ink-muted hover:underline" onClick={() => rename(p.id, p.name)}>
-                    Rename
+                  <button className="text-ink-muted hover:underline" onClick={() => setEditingId(p.id)}>
+                    Edit
                   </button>
-                  {p.isCustom && (
-                    <button className="text-red-600 dark:text-red-400 hover:underline" onClick={() => remove(p.id)}>
-                      Delete
-                    </button>
-                  )}
+                  <button className="text-red-600 dark:text-red-400 hover:underline" onClick={() => remove(p.id)}>
+                    Delete
+                  </button>
                 </div>
               </div>
+              {editingId === p.id && (
+                <CategoryEditor
+                  category={p}
+                  parents={parents}
+                  hasChildren={children.length > 0}
+                  onDone={() => setEditingId(null)}
+                />
+              )}
               {children.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {children.map((c: any) => (
@@ -155,28 +155,127 @@ export default function CategoriesPage() {
                       <span className="text-ink-muted">({c._count.transactions})</span>
                       <button
                         className="text-ink-muted hover:text-ink"
-                        onClick={() => rename(c.id, c.name)}
-                        title="Rename"
+                        onClick={() => setEditingId(c.id)}
+                        title="Edit / move"
                       >
                         ✎
                       </button>
-                      {c.isCustom && (
-                        <button
-                          className="text-red-500 hover:text-red-700"
-                          onClick={() => remove(c.id)}
-                          title="Delete"
-                        >
-                          ×
-                        </button>
-                      )}
+                      <button
+                        className="text-red-500 hover:text-red-700"
+                        onClick={() => remove(c.id)}
+                        title="Delete"
+                      >
+                        ×
+                      </button>
                     </span>
                   ))}
                 </div>
+              )}
+              {children.map(
+                (c: any) =>
+                  editingId === c.id && (
+                    <CategoryEditor
+                      key={c.id}
+                      category={c}
+                      parents={parents}
+                      hasChildren={false}
+                      onDone={() => setEditingId(null)}
+                    />
+                  )
               )}
             </div>
           );
         })}
       </div>
     </div>
+  );
+}
+
+function CategoryEditor({
+  category,
+  parents,
+  hasChildren,
+  onDone,
+}: {
+  category: any;
+  parents: any[];
+  hasChildren: boolean;
+  onDone: () => void;
+}) {
+  const [icon, setIcon] = useState(category.icon ?? "");
+  const [name, setName] = useState(category.name);
+  const [parentId, setParentId] = useState(category.parentId ?? "");
+  const [group, setGroup] = useState(category.group);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend("/api/categories", "PATCH", {
+        id: category.id,
+        name: name.trim(),
+        icon: icon || null,
+        parentId: parentId || null,
+        group,
+      });
+      invalidate();
+      onDone();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={save} className="mt-3 space-y-2 rounded-lg border border-surface-border p-3">
+      <div className="grid gap-2 md:grid-cols-[auto,1fr,1fr,1fr,auto,auto]">
+        <input
+          className="input w-16 text-center text-lg"
+          value={icon}
+          onChange={(e) => setIcon(e.target.value)}
+          aria-label="Icon"
+        />
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" />
+        <select
+          className="input"
+          value={parentId}
+          onChange={(e) => setParentId(e.target.value)}
+          disabled={hasChildren}
+          title={hasChildren ? "Move its subcategories out before nesting it" : ""}
+        >
+          <option value="">Top-level category</option>
+          {parents
+            .filter((p) => p.id !== category.id)
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                Under {p.name}
+              </option>
+            ))}
+        </select>
+        <select
+          className="input"
+          value={group}
+          onChange={(e) => setGroup(e.target.value)}
+          disabled={Boolean(parentId)}
+          title={parentId ? "Subcategories inherit the parent's group" : ""}
+        >
+          <option value="EXPENSE">Expense</option>
+          <option value="INCOME">Income</option>
+          <option value="TRANSFER">Transfer</option>
+        </select>
+        <button className="btn-primary" disabled={busy}>
+          Save
+        </button>
+        <button type="button" className="text-sm text-ink-muted hover:underline" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+    </form>
   );
 }

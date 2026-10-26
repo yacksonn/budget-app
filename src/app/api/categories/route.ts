@@ -42,14 +42,60 @@ export async function PATCH(req: Request) {
   const id = body.id as string | undefined;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
+  const current = await prisma.category.findUnique({
+    where: { id },
+    include: { _count: { select: { children: true } } },
+  });
+  if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   const data: Record<string, unknown> = {};
   if ("name" in body && body.name) data.name = String(body.name).trim();
   if ("group" in body && body.group) data.group = body.group;
   if ("icon" in body) data.icon = body.icon;
   if ("color" in body) data.color = body.color;
 
-  const category = await prisma.category.update({ where: { id }, data });
-  return NextResponse.json({ category });
+  // Moving: `parentId` null/"" makes it top-level; otherwise it goes under that parent.
+  if ("parentId" in body) {
+    const parentId = (body.parentId as string | null) || null;
+    if (parentId) {
+      if (parentId === id) {
+        return NextResponse.json({ error: "A category can't be its own parent." }, { status: 400 });
+      }
+      if (current._count.children > 0) {
+        return NextResponse.json(
+          { error: "Move this category's subcategories out before nesting it." },
+          { status: 400 }
+        );
+      }
+      const parent = await prisma.category.findUnique({ where: { id: parentId } });
+      if (!parent || parent.parentId) {
+        return NextResponse.json({ error: "Parent must be a top-level category." }, { status: 400 });
+      }
+      // Subcategories inherit their parent's group.
+      data.group = parent.group;
+    }
+    data.parentId = parentId;
+  }
+
+  const isTopLevel = !("parentId" in data ? data.parentId : current.parentId);
+  try {
+    const [category] = await prisma.$transaction([
+      prisma.category.update({ where: { id }, data }),
+      // A top-level group change carries down to its subcategories.
+      ...(isTopLevel && data.group
+        ? [prisma.category.updateMany({ where: { parentId: id }, data: { group: data.group as string } })]
+        : []),
+    ]);
+    return NextResponse.json({ category });
+  } catch (e: any) {
+    if (e?.code === "P2002") {
+      return NextResponse.json(
+        { error: "A category with that name already exists there." },
+        { status: 409 }
+      );
+    }
+    throw e;
+  }
 }
 
 export async function DELETE(req: Request) {
@@ -62,15 +108,9 @@ export async function DELETE(req: Request) {
     include: { _count: { select: { transactions: true, children: true } } },
   });
   if (!category) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!category.isCustom) {
-    return NextResponse.json(
-      { error: "Preset categories cannot be deleted." },
-      { status: 400 }
-    );
-  }
   if (category._count.children > 0) {
     return NextResponse.json(
-      { error: "Remove subcategories first." },
+      { error: "Move or delete its subcategories first." },
       { status: 400 }
     );
   }
