@@ -2,25 +2,27 @@ import type { Config } from "tailwindcss";
 
 const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
         ink: {
-          DEFAULT: "#0f172a",
-          soft: "#334155",
-          muted: "#64748b",
+          DEFAULT: "rgb(var(--ink) / <alpha-value>)",
+          soft: "rgb(var(--ink-soft) / <alpha-value>)",
+          muted: "rgb(var(--ink-muted) / <alpha-value>)",
         },
         brand: {
-          50: "#eef2ff",
-          100: "#e0e7ff",
+          50: "rgb(var(--brand-50) / <alpha-value>)",
+          100: "rgb(var(--brand-100) / <alpha-value>)",
+          300: "#a5b4fc",
           500: "#6366f1",
           600: "#4f46e5",
           700: "#4338ca",
         },
         surface: {
-          DEFAULT: "#ffffff",
-          soft: "#f8fafc",
-          border: "#e2e8f0",
+          DEFAULT: "rgb(var(--surface) / <alpha-value>)",
+          soft: "rgb(var(--surface-soft) / <alpha-value>)",
+          border: "rgb(var(--surface-border) / <alpha-value>)",
         },
       },
       fontFamily: {

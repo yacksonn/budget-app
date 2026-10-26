@@ -31,7 +31,7 @@ export function TransactionRow({
             {tx.merchantName || tx.name}
           </p>
           {tx.pending && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
               pending
             </span>
           )}
@@ -53,7 +53,7 @@ export function TransactionRow({
           />
         ) : (
           <button
-            className="mt-1 text-xs text-brand-600 hover:underline"
+            className="mt-1 text-xs text-brand-600 dark:text-brand-300 hover:underline"
             onClick={() => setNoteOpen(true)}
           >
             + note
@@ -91,7 +91,7 @@ export function TransactionRow({
         </label>
         <div
           className={`w-28 text-right font-semibold tabular-nums ${
-            isExpense ? "text-ink" : "text-green-600"
+            isExpense ? "text-ink" : "text-green-600 dark:text-green-400"
           }`}
         >
           {isExpense ? "" : "+"}

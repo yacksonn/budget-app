@@ -34,7 +34,7 @@ function StatCard({
   tone?: "ink" | "green" | "red";
 }) {
   const color =
-    tone === "green" ? "text-green-600" : tone === "red" ? "text-red-600" : "text-ink";
+    tone === "green" ? "text-green-600 dark:text-green-400" : tone === "red" ? "text-red-600 dark:text-red-400" : "text-ink";
   return (
     <div className="card">
       <p className="label">{label}</p>
@@ -83,7 +83,7 @@ export default function DashboardPage() {
         <div className="card text-center">
           <p className="text-sm text-ink-muted">
             No data yet. Head to{" "}
-            <Link href="/accounts" className="text-brand-600 underline">
+            <Link href="/accounts" className="text-brand-600 dark:text-brand-300 underline">
               Accounts
             </Link>{" "}
             to connect a bank and sync transactions.
@@ -229,7 +229,7 @@ export default function DashboardPage() {
           <div className="card">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold">Recent transactions</h2>
-              <Link href="/transactions" className="text-sm text-brand-600 hover:underline">
+              <Link href="/transactions" className="text-sm text-brand-600 dark:text-brand-300 hover:underline">
                 View all →
               </Link>
             </div>
@@ -250,7 +250,7 @@ export default function DashboardPage() {
                     </div>
                     <span
                       className={`text-sm font-semibold tabular-nums ${
-                        tx.amount > 0 ? "text-ink" : "text-green-600"
+                        tx.amount > 0 ? "text-ink" : "text-green-600 dark:text-green-400"
                       }`}
                     >
                       {tx.amount > 0 ? "" : "+"}

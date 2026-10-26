@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const LINKS = [
   { href: "/", label: "Dashboard" },
@@ -33,7 +34,7 @@ export function Nav() {
               href={link.href}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                 active
-                  ? "bg-brand-50 text-brand-700"
+                  ? "bg-brand-50 text-brand-700 dark:text-brand-300"
                   : "text-ink-soft hover:bg-surface-soft"
               }`}
             >
@@ -41,6 +42,7 @@ export function Nav() {
             </Link>
           );
         })}
+        <ThemeToggle />
       </nav>
     </header>
   );

@@ -79,7 +79,7 @@ function BudgetRow({
           </div>
           <span
             className={`w-32 text-right text-xs tabular-nums ${
-              over ? "text-red-600" : "text-ink-muted"
+              over ? "text-red-600 dark:text-red-400" : "text-ink-muted"
             }`}
           >
             {over
@@ -129,7 +129,7 @@ export default function BudgetsPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="card">
           <p className="label">Income</p>
-          <p className="mt-1 text-xl font-bold text-green-600">{formatCurrency(income)}</p>
+          <p className="mt-1 text-xl font-bold text-green-600 dark:text-green-400">{formatCurrency(income)}</p>
         </div>
         <div className="card">
           <p className="label">Budgeted / Spent</p>
@@ -144,7 +144,7 @@ export default function BudgetsPage() {
           <p className="label">Left to budget</p>
           <p
             className={`mt-1 text-xl font-bold ${
-              leftToBudget < 0 ? "text-red-600" : "text-ink"
+              leftToBudget < 0 ? "text-red-600 dark:text-red-400" : "text-ink"
             }`}
           >
             {formatCurrency(leftToBudget)}

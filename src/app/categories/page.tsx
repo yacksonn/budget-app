@@ -110,7 +110,7 @@ export default function CategoriesPage() {
           Add
         </button>
       </form>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="space-y-4">
         {parents.map((p: any) => {
@@ -138,7 +138,7 @@ export default function CategoriesPage() {
                     Rename
                   </button>
                   {p.isCustom && (
-                    <button className="text-red-600 hover:underline" onClick={() => remove(p.id)}>
+                    <button className="text-red-600 dark:text-red-400 hover:underline" onClick={() => remove(p.id)}>
                       Delete
                     </button>
                   )}

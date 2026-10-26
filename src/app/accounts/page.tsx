@@ -76,15 +76,15 @@ export default function AccountsPage() {
       {msg && <p className="text-sm text-ink-soft">{msg}</p>}
 
       {!isLoading && !configured && (
-        <div className="card border-amber-200 bg-amber-50">
-          <h2 className="font-semibold text-amber-900">Plaid not configured</h2>
-          <p className="mt-1 text-sm text-amber-800">
+        <div className="card border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40">
+          <h2 className="font-semibold text-amber-900 dark:text-amber-200">Plaid not configured</h2>
+          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
             Add your sandbox credentials to <code>.env</code>, then restart the dev server:
           </p>
           <pre className="mt-2 overflow-x-auto rounded-lg bg-amber-900/90 p-3 text-xs text-amber-50">{`PLAID_CLIENT_ID="your_client_id"
 PLAID_SECRET="your_sandbox_secret"
 PLAID_ENV="sandbox"`}</pre>
-          <p className="mt-2 text-sm text-amber-800">
+          <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
             Get free keys at{" "}
             <a
               className="underline"
@@ -125,11 +125,11 @@ PLAID_ENV="sandbox"`}</pre>
                       label={resyncing === item.id ? "Syncing…" : "Reconnect through Plaid"}
                       onLinked={() => resync(item.id)}
                       disabled={resyncing === item.id || syncing}
-                      className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50"
+                      className="text-xs font-medium text-brand-600 dark:text-brand-300 hover:underline disabled:opacity-50"
                     />
                   )}
                   <button
-                    className="text-xs text-red-600 hover:underline"
+                    className="text-xs text-red-600 dark:text-red-400 hover:underline"
                     onClick={() => disconnect(item.id)}
                   >
                     Disconnect
@@ -137,7 +137,7 @@ PLAID_ENV="sandbox"`}</pre>
                 </div>
               </div>
               {item.lastSyncError && (
-                <p className="mt-1 text-xs text-red-600">
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                   {item.lastSyncError}
                   {item.lastSyncErrorCode ? ` (${item.lastSyncErrorCode})` : ""}
                 </p>
@@ -189,7 +189,7 @@ function Spinner() {
 function SyncStatus({ item, syncing }: { item: any; syncing: boolean }) {
   if (syncing) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:text-brand-300">
         <Spinner />
         Syncing…
       </span>
@@ -197,20 +197,20 @@ function SyncStatus({ item, syncing }: { item: any; syncing: boolean }) {
   }
   if (item.lastSyncError) {
     return (
-      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300">
         Sync failed
       </span>
     );
   }
   if (!item.lastSyncedAt) {
     return (
-      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
         Not synced yet
       </span>
     );
   }
   return (
-    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
       Synced {new Date(item.lastSyncedAt).toLocaleString()}
     </span>
   );

@@ -35,7 +35,7 @@ export default function LoginPage() {
         placeholder="Password"
         className="rounded-lg border border-surface-border px-3 py-2 text-sm"
       />
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <button
         type="submit"
         disabled={loading || !password}

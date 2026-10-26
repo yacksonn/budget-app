@@ -4,17 +4,56 @@
 
 :root {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --ink: 15 23 42;
+  --ink-soft: 51 65 85;
+  --ink-muted: 100 116 139;
+  --brand-50: 238 242 255;
+  --brand-100: 224 231 255;
+  --surface: 255 255 255;
+  --surface-soft: 248 250 252;
+  --surface-border: 226 232 240;
+  --page-bg: 248 250 252;
+  --chart-grid: 238 242 247;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --ink: 241 245 249;
+  --ink-soft: 203 213 225;
+  --ink-muted: 148 163 184;
+  --brand-50: 30 27 75;
+  --brand-100: 49 46 129;
+  --surface: 15 23 42;
+  --surface-soft: 30 41 59;
+  --surface-border: 51 65 85;
+  --page-bg: 2 6 23;
+  --chart-grid: 30 41 59;
 }
 
 html,
 body {
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: rgb(var(--page-bg));
+  color: rgb(var(--ink));
+}
+
+/* Recharts sets colors via SVG attributes / inline styles; override them per theme. */
+.recharts-cartesian-grid line {
+  stroke: rgb(var(--chart-grid));
+}
+.dark .recharts-cartesian-axis-tick-value,
+.dark .recharts-legend-item-text {
+  fill: rgb(var(--ink-muted));
+}
+.dark .recharts-default-tooltip {
+  background-color: rgb(var(--surface)) !important;
+  border-color: rgb(var(--surface-border)) !important;
 }
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-surface-border bg-white p-5 shadow-sm;
+    @apply rounded-2xl border border-surface-border bg-surface p-5 shadow-sm;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
@@ -23,10 +62,10 @@ body {
     @apply btn bg-brand-600 text-white hover:bg-brand-700;
   }
   .btn-ghost {
-    @apply btn border border-surface-border bg-white text-ink-soft hover:bg-surface-soft;
+    @apply btn border border-surface-border bg-surface text-ink-soft hover:bg-surface-soft;
   }
   .input {
-    @apply w-full rounded-lg border border-surface-border bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+    @apply w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
   }
   .label {
     @apply text-xs font-semibold uppercase tracking-wide text-ink-muted;
