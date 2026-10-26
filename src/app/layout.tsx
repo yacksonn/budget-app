@@ -29,7 +29,7 @@ export default function RootLayout({
             <Nav />
             <main className="flex-1 py-6">{children}</main>
             <footer className="py-6 text-center text-xs text-ink-muted">
-              Budget App · local sandbox · data stays on this machine
+                OH BUDGET APP
             </footer>
           </div>
         </Providers>
