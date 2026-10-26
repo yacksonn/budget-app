@@ -1,27 +1,48 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "budget-app",
-  "main": ".open-next/worker.js",
-  "compatibility_date": "2026-10-01",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS"
-  },
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "budget-app",
+	"main": ".open-next/worker.js",
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
       "service": "budget-app"
     }
   ],
-  "observability": {
-    "enabled": true
+  // Pooled DB connections (caching disabled: app reads must see its own writes).
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "248bba88b95445c5bbd6f5a74bc0485b"
+    }
+  ],
+  // Run the Worker next to the Supabase database (us-west-2): API routes make several
+  // sequential queries, so each round trip drops from ~70 ms to a few ms.
+  "placement": {
+    "region": "aws:us-west-2"
   },
-  // Non-secret config. Secrets (APP_PASSWORD, DATABASE_URL, DIRECT_URL, PLAID_CLIENT_ID,
-  // PLAID_SECRET) are set as type "Secret" in the Cloudflare dashboard, never here.
-  "vars": {
-    "PLAID_ENV": "production",
-    "PLAID_PRODUCTS": "transactions",
-    "PLAID_COUNTRY_CODES": "US"
-  }
+	"observability": {
+		"enabled": true
+	},
+	// Non-secret config. Secrets (APP_PASSWORD, DATABASE_URL, DIRECT_URL, PLAID_CLIENT_ID,
+	// PLAID_SECRET) are set as type "Secret" in the Cloudflare dashboard, never here.
+	"vars": {
+		"PLAID_ENV": "production",
+		"PLAID_PRODUCTS": "transactions",
+		"PLAID_COUNTRY_CODES": "US"
+	},
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "248bba88b95445c5bbd6f5a74bc0485b"
+		}
+	]
 }

@@ -4,11 +4,11 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 const isWorkers = typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
 
-function createClient() {
+function createClient(connectionString = process.env.DATABASE_URL) {
   return new PrismaClient({
-    // On Workers, one connection per request: each extra connection costs a TLS + SCRAM
-    // handshake (CPU time); parallel queries in a request just queue on it.
-    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL, ...(isWorkers && { max: 1 }) }),
+    // On Workers, one connection per request: parallel queries in a request just queue on
+    // it. The connection goes to Hyperdrive, which keeps a warm pool to the database.
+    adapter: new PrismaPg({ connectionString, ...(isWorkers && { max: 1 }) }),
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 }
@@ -22,10 +22,10 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function getClient(): PrismaClient {
   if (isWorkers) {
-    const { ctx } = getCloudflareContext();
+    const { ctx, env } = getCloudflareContext();
     let client = perRequest.get(ctx);
     if (!client) {
-      client = createClient();
+      client = createClient((env as { HYPERDRIVE: { connectionString: string } }).HYPERDRIVE.connectionString);
       perRequest.set(ctx, client);
     }
     return client;
