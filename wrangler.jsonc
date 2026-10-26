@@ -18,10 +18,15 @@
     }
   ],
   // Pooled DB connections (caching disabled: app reads must see its own writes).
+  // `localConnectionString` is only used by local binding emulation (wrangler dev, and
+  // `opennextjs-cloudflare deploy`, which reads vars through it but never queries the DB).
+  // It's a placeholder; for a working local preview, set
+  // CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE, which overrides it.
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "248bba88b95445c5bbd6f5a74bc0485b"
+      "id": "248bba88b95445c5bbd6f5a74bc0485b",
+      "localConnectionString": "postgresql://postgres:postgres@localhost:5432/postgres"
     }
   ],
   // Run the Worker next to the Supabase database (us-west-2): API routes make several
@@ -38,11 +43,5 @@
 		"PLAID_ENV": "production",
 		"PLAID_PRODUCTS": "transactions",
 		"PLAID_COUNTRY_CODES": "US"
-	},
-	"hyperdrive": [
-		{
-			"binding": "HYPERDRIVE",
-			"id": "248bba88b95445c5bbd6f5a74bc0485b"
-		}
-	]
+	}
 }
