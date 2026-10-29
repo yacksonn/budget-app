@@ -15,6 +15,7 @@ export default function TransactionsPage() {
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>("");
   const [onlyUnreviewed, setOnlyUnreviewed] = useState(false);
+  const [minAmount, setMinAmount] = useState("");
 
   const { data: catData } = useSWR("/api/categories", fetcher);
   const { data: acctData } = useSWR("/api/accounts", fetcher);
@@ -34,9 +35,11 @@ export default function TransactionsPage() {
   const selectedCat = categories.find((c: any) => c.id === categoryId);
   // The seeded top-level "Uncategorized" bucket also covers rows with no category at all.
   const matchUncategorized = selectedCat?.name === "Uncategorized" && !selectedCat.parentId;
+  const min = parseFloat(minAmount);
   const transactions = allTransactions.filter(
     (t: any) =>
       (!onlyUnreviewed || !t.reviewed) &&
+      (!(min > 0) || Math.abs(t.amount) > min) &&
       (!accountId || t.accountId === accountId) &&
       // A parent category ("Food & Dining (all)") matches itself and all its subcategories.
       (!categoryId ||
@@ -46,7 +49,7 @@ export default function TransactionsPage() {
       (!q ||
         [t.name, t.merchantName, t.note].some((s) => s?.toLowerCase().includes(q)))
   );
-  const filtered = Boolean(search || accountId || categoryId || onlyUnreviewed);
+  const filtered = Boolean(search || accountId || categoryId || onlyUnreviewed || minAmount);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -98,7 +101,7 @@ export default function TransactionsPage() {
       </div>
 
       <div className="card space-y-3">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-5">
           <input
             className="input"
             placeholder="Search name, merchant, note…"
@@ -123,6 +126,16 @@ export default function TransactionsPage() {
             value={categoryId}
             onChange={(id) => setCategoryId(id ?? "")}
             noneLabel="All categories"
+          />
+          <input
+            className="input"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            placeholder="Amount above $…"
+            value={minAmount}
+            onChange={(e) => setMinAmount(e.target.value)}
           />
           <label className="flex items-center gap-2 text-sm text-ink-soft">
             <input
