@@ -8,6 +8,7 @@ import { currentMonth } from "@/lib/format";
 import { MonthPicker } from "@/components/MonthPicker";
 import { TransactionRow } from "@/components/TransactionRow";
 import { CategorySelect } from "@/components/CategorySelect";
+import { CC_PAYMENT_CATEGORY_NAME } from "@/lib/cc-payments";
 
 export default function TransactionsPage() {
   const [month, setMonth] = useState(currentMonth());
@@ -16,6 +17,7 @@ export default function TransactionsPage() {
   const [categoryId, setCategoryId] = useState<string | null>("");
   const [onlyUnreviewed, setOnlyUnreviewed] = useState(false);
   const [minAmount, setMinAmount] = useState("");
+  const [excludeCcPayments, setExcludeCcPayments] = useState(false);
 
   const { data: catData } = useSWR("/api/categories", fetcher);
   const { data: acctData } = useSWR("/api/accounts", fetcher);
@@ -40,6 +42,8 @@ export default function TransactionsPage() {
     (t: any) =>
       (!onlyUnreviewed || !t.reviewed) &&
       (!(min > 0) || Math.abs(t.amount) > min) &&
+      (!excludeCcPayments ||
+        !(t.category?.name === CC_PAYMENT_CATEGORY_NAME && t.category?.group === "TRANSFER")) &&
       (!accountId || t.accountId === accountId) &&
       // A parent category ("Food & Dining (all)") matches itself and all its subcategories.
       (!categoryId ||
@@ -49,7 +53,7 @@ export default function TransactionsPage() {
       (!q ||
         [t.name, t.merchantName, t.note].some((s) => s?.toLowerCase().includes(q)))
   );
-  const filtered = Boolean(search || accountId || categoryId || onlyUnreviewed || minAmount);
+  const filtered = Boolean(search || accountId || categoryId || onlyUnreviewed || minAmount || excludeCcPayments);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -137,14 +141,24 @@ export default function TransactionsPage() {
             value={minAmount}
             onChange={(e) => setMinAmount(e.target.value)}
           />
-          <label className="flex items-center gap-2 text-sm text-ink-soft">
-            <input
-              type="checkbox"
-              checked={onlyUnreviewed}
-              onChange={(e) => setOnlyUnreviewed(e.target.checked)}
-            />
-            Only unreviewed
-          </label>
+          <div className="flex flex-col justify-center gap-1">
+            <label className="flex items-center gap-2 text-sm text-ink-soft">
+              <input
+                type="checkbox"
+                checked={onlyUnreviewed}
+                onChange={(e) => setOnlyUnreviewed(e.target.checked)}
+              />
+              Only unreviewed
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink-soft">
+              <input
+                type="checkbox"
+                checked={excludeCcPayments}
+                onChange={(e) => setExcludeCcPayments(e.target.checked)}
+              />
+              Exclude credit card payments
+            </label>
+          </div>
         </div>
       </div>
 
